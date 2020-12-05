@@ -123,11 +123,6 @@ func getPods(filter string, run func(cmd string, arg []string) (*bufio.Scanner, 
 		cmdOut = cmdOut + scanner.Text()
 	}
 
-	/*
-		cmd := exec.Command("cmd.exe", args...)
-		cmdOut, err := cmd.Output()
-	*/
-
 	var js Pods_json
 	err = json.Unmarshal([]byte(cmdOut), &js)
 
@@ -136,7 +131,7 @@ func getPods(filter string, run func(cmd string, arg []string) (*bufio.Scanner, 
 	}
 
 	for i := 0; i < len(js.Pods); i++ {
-		match, _ := regexp.MatchString(podFilter, js.Pods[i].Metadata.Name)
+		match, _ := regexp.MatchString(filter, js.Pods[i].Metadata.Name)
 		if match {
 			pod := Pod{
 				PodName:  js.Pods[i].Metadata.Name,
@@ -147,6 +142,7 @@ func getPods(filter string, run func(cmd string, arg []string) (*bufio.Scanner, 
 			pods[pod.hash()] = pod
 		}
 	}
+
 	return pods, nil
 }
 
@@ -178,13 +174,12 @@ func newPinger(source Pod, destination Pod, output chan PingRecord, run func(cmd
 		scanner, err := run("ping", args)
 
 		if err != nil {
-			fmt.Println("pinger error %v", err)
+			fmt.Println(fmt.Sprintf("pinger error %v", err))
 		} else {
 			fmt.Println(fmt.Sprintf("pinger for '%s' started", destination.PodName))
-			for {
+			working: for {
 				// read all command output to channel
 				for scanner.Scan() {
-
 					text := scanner.Text()
 
 					if len(text) > 0 {
@@ -194,37 +189,40 @@ func newPinger(source Pod, destination Pod, output chan PingRecord, run func(cmd
 							Message:     text}
 						output <- record
 					}
+					
+					// until channel will be closed
+					_, ok := <-pinger.Done
+					if !ok {
+						break working
+					}
+
 				}
 
-				// until channel will be closed
-				_, ok := <-pinger.Done
-				if !ok {
-					break
-				}
 			}
-			fmt.Println("pinger for '%v' finished", destination.PodName)
+			fmt.Println(fmt.Sprintf("pinger for '%v' finished", destination.PodName))
 		}
 	}()
 
 	return &pinger, nil
 }
 
-func newPingersPool(filter string, output chan PingRecord, run func(cmd string, arg []string) (*bufio.Scanner, error)) {
+func newPingersPool(filter string, output chan PingRecord, configRefreshInterval time.Duration, run func(cmd string, arg []string) (*bufio.Scanner, error)) {
 
 	pingers := map[string]*Pinger{}
 
+	ips, err := getUsedIPs()
+	if err != nil {
+		//time.Sleep(2 * time.Second) // do not restart pod immediately
+		panic(err)
+	}
+
 	for {
 
-		ips, err := getUsedIPs()
-		if err != nil {
-			time.Sleep(2 * time.Second) // do not restart pod immediately
-			panic(err)
-		}
 		//fmt.Println(fmt.Sprintf("UsedIps:%v", strings.Join(ips,",\n")));
 
 		pods, err := getPods(filter, run)
 		if err != nil {
-			time.Sleep(2 * time.Second) // do not restart pod immediately
+			//time.Sleep(2 * time.Second) // do not restart pod immediately
 			panic(err)
 		}
 		//fmt.Println(fmt.Sprintf("Pods:%v", pods));
@@ -247,7 +245,7 @@ func newPingersPool(filter string, output chan PingRecord, run func(cmd string, 
 				}
 
 				// delete unused pingers
-				for key, _ := range pingers {
+				for key := range pingers {
 					_, exists := pods[key]
 					if !exists {
 						pingers[key].Destroy()
@@ -256,20 +254,16 @@ func newPingersPool(filter string, output chan PingRecord, run func(cmd string, 
 				}
 			}
 		}
-
-		fmt.Println(".")
-		time.Sleep(2 * time.Second)
+		time.Sleep(configRefreshInterval)
 	}
 }
-
-const podFilter = "monitoring-busybox"
 
 func main() {
 
 	output := make(chan PingRecord)
 
 	go func() {
-		newPingersPool(podFilter, output, run)
+		newPingersPool("monitoring-busybox", output, 0, run)
 	}()
 
 	// write to output all records
