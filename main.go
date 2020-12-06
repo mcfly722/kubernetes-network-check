@@ -7,6 +7,7 @@ import (
 	"net"
 	"os/exec"
 	"regexp"
+	"runtime"
 	"time"
 )
 
@@ -17,7 +18,7 @@ type Spec_json struct {
 type Status_json struct {
 	HostIP string `json:"hostIP"`
 	PodIP  string `json:"podIP"`
-	phase  string `json:"phase"`
+	Phase  string `json:"phase"`
 }
 
 type Metadata_json struct {
@@ -53,10 +54,10 @@ type PingRecord struct {
 }
 
 func (record *PingRecord) toString() string {
-	//json, _ := json.Marshal(record)
-	//return string(json)
+	json, _ := json.Marshal(record)
+	return string(json)
 
-	return fmt.Sprintf("%15s->%15s  : %s", record.Source.PodIP, record.Destination.PodIP, record.Message)
+	//return fmt.Sprintf("%15s->%15s  : %s", record.Source.PodIP, record.Destination.PodIP, record.Message)
 }
 
 func newPod(podName string, podIP string, hostName string, hostIP string) *Pod {
@@ -133,13 +134,15 @@ func getPods(filter string, run func(cmd string, arg []string) (*bufio.Scanner, 
 	for i := 0; i < len(js.Pods); i++ {
 		match, _ := regexp.MatchString(filter, js.Pods[i].Metadata.Name)
 		if match {
-			pod := Pod{
-				PodName:  js.Pods[i].Metadata.Name,
-				PodIP:    js.Pods[i].Status.PodIP,
-				HostName: js.Pods[i].Spec.NodeName,
-				HostIP:   js.Pods[i].Status.HostIP}
+			if js.Pods[i].Status.Phase == "Running" {
+				pod := Pod{
+					PodName:  js.Pods[i].Metadata.Name,
+					PodIP:    js.Pods[i].Status.PodIP,
+					HostName: js.Pods[i].Spec.NodeName,
+					HostIP:   js.Pods[i].Status.HostIP}
 
-			pods[pod.hash()] = pod
+				pods[pod.hash()] = pod
+			}
 		}
 	}
 
@@ -177,9 +180,10 @@ func newPinger(source Pod, destination Pod, output chan PingRecord, run func(cmd
 			fmt.Println(fmt.Sprintf("pinger error %v", err))
 		} else {
 			fmt.Println(fmt.Sprintf("pinger for '%s' started", destination.PodName))
-			working: for {
+		working:
+			for {
 				select {
-				case <- pinger.Done:
+				case <-pinger.Done:
 					break working
 				default:
 					if scanner.Scan() {
@@ -193,6 +197,7 @@ func newPinger(source Pod, destination Pod, output chan PingRecord, run func(cmd
 						}
 					}
 				}
+				runtime.Gosched()
 			}
 			fmt.Println(fmt.Sprintf("pinger for '%v' finished", destination.PodName))
 		}
@@ -249,6 +254,9 @@ func newPingersPool(filter string, output chan PingRecord, configRefreshInterval
 				}
 			}
 		}
+
+		runtime.Gosched()
+
 		time.Sleep(configRefreshInterval)
 	}
 }
