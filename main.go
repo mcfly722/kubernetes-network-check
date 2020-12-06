@@ -178,26 +178,21 @@ func newPinger(source Pod, destination Pod, output chan PingRecord, run func(cmd
 		} else {
 			fmt.Println(fmt.Sprintf("pinger for '%s' started", destination.PodName))
 			working: for {
-				// read all command output to channel
-				for scanner.Scan() {
-					text := scanner.Text()
-
-					if len(text) > 0 {
-						record := PingRecord{
-							Source:      source,
-							Destination: destination,
-							Message:     text}
-						output <- record
+				select {
+				case <- pinger.Done:
+					break working
+				default:
+					if scanner.Scan() {
+						text := scanner.Text()
+						if len(text) > 0 {
+							record := PingRecord{
+								Source:      source,
+								Destination: destination,
+								Message:     text}
+							output <- record
+						}
 					}
-					
-					// until channel will be closed
-					_, ok := <-pinger.Done
-					if !ok {
-						break working
-					}
-
 				}
-
 			}
 			fmt.Println(fmt.Sprintf("pinger for '%v' finished", destination.PodName))
 		}

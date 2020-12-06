@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"sync"
 )
 
 func newFakePod(podId string, status string) Pod_json {
@@ -26,9 +27,13 @@ func RemoveIndex(s []Pod_json, index int) []Pod_json {
 	return append(s[:index], s[index+1:]...)
 }
 
-var lastFakePod int = 1
-//var pingCount   int = 0
-//var pingerCount int = 0
+var lastFakePod    int = 1
+
+var pingCount_mu   sync.Mutex
+var pingCount      int = 0
+
+var pingerCount_mu sync.Mutex
+var pingerCount    int = 0
 
 
 func fakeGetPods() string {
@@ -48,14 +53,14 @@ func fakeGetPods() string {
 
 	for i := lastFakePod; i < lastFakePod+5; i++ {
 		var status = fmt.Sprintf("Running")
-		if i%5 == 0 {
+		if i % 5 == 0 {
 			status = "Stopped"
 		}
 
 		js.Pods = append(js.Pods, newFakePod(strconv.Itoa(i), status))
 	}
 
-	lastFakePod = lastFakePod + rand.Intn(3)
+	lastFakePod = lastFakePod + rand.Intn(2)
 
 	//fmt.Println(fmt.Sprintf("len=%v %v",len(js.Pods),js.Pods))
 	s, _ := json.Marshal(js)
@@ -74,7 +79,11 @@ func (fReader *fakeReader) Read(p []byte) (int, error) {
 	copy(p, buf)
 
 	//time.Sleep(10 * time.Millisecond)
-	//pingCount++
+	
+	pingCount_mu.Lock()
+	pingCount++
+	pingCount_mu.Unlock()
+	
 	return len(buf), nil
 }
 
@@ -89,7 +98,10 @@ func fakeRun(cmd string, args []string) (*bufio.Scanner, error) {
 		scanner = bufio.NewScanner(reader)
 	}
 	
-	//pingerCount++
+	pingerCount_mu.Lock()
+	pingerCount++
+	pingerCount_mu.Unlock()
+	
 	return scanner, nil
 }
 
@@ -98,7 +110,7 @@ func TestRace(test *testing.T) {
 	output := make(chan PingRecord)
 
 	go func() {
-		newPingersPool("test", output, 1*time.Nanosecond, fakeRun)
+		newPingersPool("test", output, 1000*time.Millisecond, fakeRun)
 	}()
 
 	startTime := time.Now()
@@ -117,6 +129,6 @@ func TestRace(test *testing.T) {
 		}
 	}
 	
-	test.Logf(fmt.Sprintf("faked pods = %v", lastFakePod))
+	test.Logf(fmt.Sprintf("fake pods = %v\nping = %v\npingers = %v", lastFakePod, pingCount, pingerCount))
 }
 
