@@ -112,9 +112,9 @@ func contains(s []string, str string) bool {
 func getPods(filter string, run func(cmd string, arg []string) (*bufio.Scanner, error)) (map[string]Pod, error) {
 	pods := make(map[string]Pod)
 
-	args := []string{"/c", "type", "kctl.json"}
+	args := []string{"get", "pods", "-A", "--alsologtostderr","-o","json"}
 
-	scanner, err := run("cmd.exe", args)
+	scanner, err := run("/kubectl", args)
 	if err != nil {
 		return nil, err
 	}
@@ -158,12 +158,22 @@ func (pinger *Pinger) Destroy() {
 }
 
 func run(cmd string, args []string) (*bufio.Scanner, error) {
-
+	fmt.Println(fmt.Sprintf("exec: %v %v", cmd, args))
 	command := exec.Command(cmd, args...)
 	commandOut, _ := command.StdoutPipe()
-	scanner := bufio.NewScanner(commandOut)
+	commandErr, _ := command.StderrPipe()
+	output_scanner:= bufio.NewScanner(commandOut)
+	err_scanner   := bufio.NewScanner(commandErr)
 	err := command.Start()
-	return scanner, err
+
+	if err == nil { // out errStdout even if there are no execution errors
+		for err_scanner.Scan() {
+			fmt.Println(err_scanner.Text())
+		}
+	}
+
+
+	return output_scanner, err
 }
 
 func newPinger(source Pod, destination Pod, output chan PingRecord, run func(cmd string, arg []string) (*bufio.Scanner, error)) (*Pinger, error) {
@@ -174,7 +184,7 @@ func newPinger(source Pod, destination Pod, output chan PingRecord, run func(cmd
 
 	go func() {
 		args := []string{"-t", destination.PodIP}
-		scanner, err := run("ping", args)
+		scanner, err := run("/bin/ping", args)
 
 		if err != nil {
 			fmt.Println(fmt.Sprintf("pinger error %v", err))
@@ -266,7 +276,7 @@ func main() {
 	output := make(chan PingRecord)
 
 	go func() {
-		newPingersPool("monitoring-busybox", output, 0, run)
+		newPingersPool("kubernetes-network-check-", output, 0, run)
 	}()
 
 	// write to output all records
