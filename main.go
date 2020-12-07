@@ -237,38 +237,39 @@ func newPingersPool(filter string, output chan PingRecord, configRefreshInterval
 		pods, err := getPods(filter, run)
 		if err != nil {
 			//time.Sleep(2 * time.Second) // do not restart pod immediately
-			panic(err)
-		}
-		fmt.Println(fmt.Sprintf("used pods: %v", pods));
+			fmt.Println(fmt.Sprintf("error: %v", err));
+			//panic(err)
+		} else {
+			fmt.Println(fmt.Sprintf("used pods: %v", pods));
 
-		// search current pod
-		for _, sourcePod := range pods {
+			// search current pod
+			for _, sourcePod := range pods {
 
-			if contains(ips, sourcePod.PodIP) {
+				if contains(ips, sourcePod.PodIP) {
 
-				s,_ := json.Marshal(sourcePod)
-				fmt.Println(fmt.Sprintf("current pod: %v", string(s)));
+					s,_ := json.Marshal(sourcePod)
+					fmt.Println(fmt.Sprintf("current pod: %v", string(s)));
 
-				// add new pingers
-				for key, pod := range pods {
-					_, exist := pingers[key]
-					if !exist {
-						pinger, _ := newPinger(sourcePod, pod, output, run)
-						pingers[key] = pinger
+					// add new pingers
+					for key, pod := range pods {
+						_, exist := pingers[key]
+						if !exist {
+							pinger, _ := newPinger(sourcePod, pod, output, run)
+							pingers[key] = pinger
+						}
 					}
-				}
 
-				// delete unused pingers
-				for key := range pingers {
-					_, exists := pods[key]
-					if !exists {
-						pingers[key].Destroy()
-						delete(pingers, key)
+					// delete unused pingers
+					for key := range pingers {
+						_, exists := pods[key]
+						if !exists {
+							pingers[key].Destroy()
+							delete(pingers, key)
+						}
 					}
 				}
 			}
 		}
-
 		time.Sleep(configRefreshInterval)
 	}
 }
@@ -278,7 +279,7 @@ func main() {
 	output := make(chan PingRecord)
 
 	go func() {
-		newPingersPool("kubernetes-network-check-", output, 30, run)
+		newPingersPool("kubernetes-network-check-", output, 30 * time.Second, run)
 	}()
 
 	// write to output all records
