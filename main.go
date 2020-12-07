@@ -133,6 +133,7 @@ func getPods(filter string, run func(cmd string, arg []string) (*bufio.Scanner, 
 
 	for i := 0; i < len(js.Pods); i++ {
 		match, _ := regexp.MatchString(filter, js.Pods[i].Metadata.Name)
+		fmt.Println(fmt.Sprintf("match: %v - %v - %v", js.Pods[i].Metadata.Name, filter, match))
 		if match {
 			if js.Pods[i].Status.Phase == "Running" {
 				pod := Pod{
@@ -161,17 +162,18 @@ func run(cmd string, args []string) (*bufio.Scanner, error) {
 	fmt.Println(fmt.Sprintf("exec: %v %v", cmd, args))
 	command := exec.Command(cmd, args...)
 	commandOut, _ := command.StdoutPipe()
-	commandErr, _ := command.StderrPipe()
+//	commandErr, _ := command.StderrPipe()
 	output_scanner:= bufio.NewScanner(commandOut)
-	err_scanner   := bufio.NewScanner(commandErr)
+//	err_scanner   := bufio.NewScanner(commandErr)
 	err := command.Start()
 
+/*
 	if err == nil { // out errStdout even if there are no execution errors
 		for err_scanner.Scan() {
 			fmt.Println(err_scanner.Text())
 		}
 	}
-
+*/
 
 	return output_scanner, err
 }
