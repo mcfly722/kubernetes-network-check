@@ -226,6 +226,8 @@ func newPingersPool(filter string, output chan PingRecord, configRefreshInterval
 		panic(err)
 	}
 
+	fmt.Println(fmt.Sprintf("used ips: %v", ips))
+	
 	for {
 
 		//fmt.Println(fmt.Sprintf("UsedIps:%v", strings.Join(ips,",\n")));
@@ -265,8 +267,6 @@ func newPingersPool(filter string, output chan PingRecord, configRefreshInterval
 			}
 		}
 
-		runtime.Gosched()
-
 		time.Sleep(configRefreshInterval)
 	}
 }
@@ -276,7 +276,7 @@ func main() {
 	output := make(chan PingRecord)
 
 	go func() {
-		newPingersPool("kubernetes-network-check-", output, 0, run)
+		newPingersPool("kubernetes-network-check-", output, 30, run)
 	}()
 
 	// write to output all records
