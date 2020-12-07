@@ -133,7 +133,7 @@ func getPods(filter string, run func(cmd string, arg []string) (*bufio.Scanner, 
 
 	for i := 0; i < len(js.Pods); i++ {
 		match, _ := regexp.MatchString(filter, js.Pods[i].Metadata.Name)
-		fmt.Println(fmt.Sprintf("match: %v - %v - %v", js.Pods[i].Metadata.Name, filter, match))
+		//fmt.Println(fmt.Sprintf("match: %v - %v - %v", js.Pods[i].Metadata.Name, filter, match))
 		if match {
 			if js.Pods[i].Status.Phase == "Running" {
 				pod := Pod{
@@ -185,7 +185,7 @@ func newPinger(source Pod, destination Pod, output chan PingRecord, run func(cmd
 	}
 
 	go func() {
-		args := []string{"-t", destination.PodIP}
+		args := []string{destination.PodIP}
 		scanner, err := run("/bin/ping", args)
 
 		if err != nil {
