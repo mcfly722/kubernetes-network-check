@@ -237,15 +237,15 @@ func newPingersPool(filter string, output chan PingRecord, configRefreshInterval
 			//time.Sleep(2 * time.Second) // do not restart pod immediately
 			panic(err)
 		}
-		//fmt.Println(fmt.Sprintf("Pods:%v", pods));
+		fmt.Println(fmt.Sprintf("used pods: %v", pods));
 
 		// search current pod
-		for key, sourcePod := range pods {
+		for _, sourcePod := range pods {
 
-			if contains(ips, pods[key].PodIP) {
+			if contains(ips, sourcePod.PodIP) {
 
-				//s,_ := json.Marshal(sourcePod)
-				//fmt.Println(fmt.Sprintf("Pod IPs [%v]\ncurrent pod=", strings.Join(ips,", "), string(s)));
+				s,_ := json.Marshal(sourcePod)
+				fmt.Println(fmt.Sprintf("current pod: %v", string(s)));
 
 				// add new pingers
 				for key, pod := range pods {
