@@ -51,6 +51,7 @@ type PingRecord struct {
 	Source      Pod
 	Destination Pod
 	Message     string
+	Elapsed_us  int64
 }
 
 func (record *PingRecord) toString() string {
@@ -192,6 +193,9 @@ func newPinger(source Pod, destination Pod, output chan PingRecord, run func(cmd
 			fmt.Println(fmt.Sprintf("pinger error %v", err))
 		} else {
 			fmt.Println(fmt.Sprintf("pinger for '%s' started", destination.PodName))
+
+			start := time.Now()
+
 		working:
 			for {
 				select {
@@ -201,11 +205,17 @@ func newPinger(source Pod, destination Pod, output chan PingRecord, run func(cmd
 					if scanner.Scan() {
 						text := scanner.Text()
 						if len(text) > 0 {
+							elapsed := time.Since(start)
+
 							record := PingRecord{
-								Source:      source,
-								Destination: destination,
-								Message:     text}
+								Source      : source,
+								Destination : destination,
+								Message     : text,
+								Elapsed_us  : elapsed.Microseconds()}
+							
 							output <- record
+							
+							start = time.Now()
 						}
 					}
 				}
