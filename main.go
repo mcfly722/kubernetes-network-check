@@ -185,7 +185,7 @@ func newPinger(source Pod, destination Pod, output chan PingRecord, run func(cmd
 	}
 
 	go func() {
-		args := []string{destination.PodIP}
+		args := []string{destination.PodIP, "-i", "5"}
 		scanner, err := run("/bin/ping", args)
 
 		if err != nil {
