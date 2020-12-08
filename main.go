@@ -11,36 +11,13 @@ import (
 	"time"
 	"strconv"
 	"flag"
-
-	"k8s.io/apimachinery/pkg/api/errors"
+	"strings"
+	
+//	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 )
-
-type Spec_json struct {
-	NodeName string `json:"nodeName"`
-}
-
-type Status_json struct {
-	HostIP string `json:"hostIP"`
-	PodIP  string `json:"podIP"`
-	Phase  string `json:"phase"`
-}
-
-type Metadata_json struct {
-	Name string `json:"name"`
-}
-
-type Pod_json struct {
-	Metadata Metadata_json `json:"metadata"`
-	Spec     Spec_json     `json:"spec"`
-	Status   Status_json   `json:"status"`
-}
-
-type Pods_json struct {
-	Pods []Pod_json `json:"items"`
-}
 
 type Pod struct {
 	PodName  string
@@ -117,45 +94,33 @@ func contains(s []string, str string) bool {
 	return false
 }
 
-func getPods(filter string, run func(cmd string, arg []string) (*bufio.Scanner, error)) (map[string]Pod, error) {
-	pods := make(map[string]Pod)
-
-	args := []string{"get", "pods", "-A", "--alsologtostderr","-o","json"}
-
-	scanner, err := run("/kubectl", args)
+func getPods2(clientset *kubernetes.Clientset, namespace string, podPrefix string) (map[string]Pod, error) {
+	result := make(map[string]Pod)
+	
+	pods, err := clientset.CoreV1().Pods(namespace).List(metav1.ListOptions{})
 	if err != nil {
 		return nil, err
-	}
-
-	var cmdOut = ""
-	for scanner.Scan() {
-		cmdOut = cmdOut + scanner.Text()
-	}
-
-	var js Pods_json
-	err = json.Unmarshal([]byte(cmdOut), &js)
-
-	if err != nil {
-		return nil, err
-	}
-
-	for i := 0; i < len(js.Pods); i++ {
-		match, _ := regexp.MatchString(filter, js.Pods[i].Metadata.Name)
-		//fmt.Println(fmt.Sprintf("match: %v - %v - %v", js.Pods[i].Metadata.Name, filter, match))
-		if match {
-			if js.Pods[i].Status.Phase == "Running" {
+	} 
+	
+	for _,pod := range pods.Items {
+		if strings.HasPrefix(strings.ToUpper(pod.GetName()), strings.ToUpper(podPrefix)) {
+			
+			if pod.Status.Phase == "Running" {
 				pod := Pod{
-					PodName:  js.Pods[i].Metadata.Name,
-					PodIP:    js.Pods[i].Status.PodIP,
-					HostName: js.Pods[i].Spec.NodeName,
-					HostIP:   js.Pods[i].Status.HostIP}
+					PodName:  pod.GetName(),
+					PodIP:    pod.Status.PodIP,
+					HostName: pod.Spec.NodeName,
+					HostIP:   pod.Status.HostIP}
 
-				pods[pod.hash()] = pod
+				result[pod.hash()] = pod
 			}
+			
 		}
+		//fmt.Println(fmt.Sprintf("Pod: %v PodIP: %v Node: %v NodeIP: %v Phase: %v", pod.GetName(),pod.Status.PodIP, pod.Spec.NodeName,pod.Status.HostIP, pod.Status.Phase ))
 	}
-
-	return pods, nil
+	
+	return result, nil
+	
 }
 
 type Pinger struct {
@@ -257,13 +222,7 @@ func newPinger(source Pod, destination Pod, intervalSec int, output chan PingRec
 	return &pinger, nil
 }
 
-func newPingersPool(filter string, output chan PingRecord, configRefreshInterval time.Duration, pingIntervalSec int, run func(cmd string, arg []string) (*bufio.Scanner, error)) {
-
-
-
-
-
-
+func newPingersPool(clientset *kubernetes.Clientset, namespace string, podsPrefix string, output chan PingRecord, configRefreshInterval time.Duration, pingIntervalSec int, run func(cmd string, arg []string) (*bufio.Scanner, error)) {
 
 	pingers := map[string]*Pinger{}
 
@@ -279,7 +238,7 @@ func newPingersPool(filter string, output chan PingRecord, configRefreshInterval
 
 		//fmt.Println(fmt.Sprintf("UsedIps:%v", strings.Join(ips,",\n")));
 
-		pods, err := getPods(filter, run)
+		pods, err := getPods2(clientset, namespace, podsPrefix)
 		if err != nil {
 			//time.Sleep(2 * time.Second) // do not restart pod immediately
 			fmt.Println(fmt.Sprintf("error: %v", err));
@@ -322,10 +281,14 @@ func newPingersPool(filter string, output chan PingRecord, configRefreshInterval
 func main() {
 	var updateConfigSecFlag *int
 	var pingIntervalSecFlag *int
+	var namespaceFlag *string
+	var podsPrefixFlag *string
 
 	
 	updateConfigSecFlag = flag.Int("updateConfigIntervalSec", 30, "interval in seconds between asking cluster for ping pods configuration")
 	pingIntervalSecFlag = flag.Int("pingIntervalSec", 1, "equal ping -i parameter")
+	namespaceFlag = flag.String("namespace", "monitoring", "pods namespace")
+	podsPrefixFlag = flag.String("podsPrefix", "kubernetes-network-check", "pods prefix")
 	
 	flag.Parse()
 
@@ -339,34 +302,15 @@ func main() {
         panic(err.Error())
     }
 	
-	namespace := "monitoring"
-	podName := "kubernetes-network-check"
-	pods, err := clientset.CoreV1().Pods(namespace).List(metav1.ListOptions{})
-	if errors.IsNotFound(err) {
-		fmt.Printf("Pod %s in namespace %s not found\n", podName, namespace)
-	} else if statusError, isStatus := err.(*errors.StatusError); isStatus {
-		fmt.Printf("Error getting pod %s in namespace %s: %v\n",
-			podName, namespace, statusError.ErrStatus.Message)
-	} else if err != nil {
-		panic(err.Error())
-	} else {
-		fmt.Printf("Found pod %s in namespace %s\n", podName, namespace)
-	}
-		
-	for _,pod := range pods.Items {
-		fmt.Println(fmt.Sprintf("Pod: %v PodIP: %v Node: %v NodeIP: %v Phase: %v", pod.GetName(),pod.Status.PodIP, pod.Spec.NodeName,pod.Status.HostIP, pod.Status.Phase ))
-	}
-		
-		
-	
 	fmt.Println(fmt.Sprintf("updateConfigIntervalSec = %vsec", updateConfigSecFlag))
 	fmt.Println(fmt.Sprintf("pingIntervalSec = %vsec", pingIntervalSecFlag))
-	
+	fmt.Println(fmt.Sprintf("namespace = %s", namespaceFlag))
+	fmt.Println(fmt.Sprintf("podsPrefix = %s", podsPrefixFlag))
 
 	output := make(chan PingRecord)
 
 	go func() {
-		newPingersPool("kubernetes-network-check-", output, time.Duration(*updateConfigSecFlag) * time.Second, *pingIntervalSecFlag, run)
+		newPingersPool(clientset, *namespaceFlag, *podsPrefixFlag, output, time.Duration(*updateConfigSecFlag) * time.Second, *pingIntervalSecFlag, run)
 	}()
 
 	// write to output all records
