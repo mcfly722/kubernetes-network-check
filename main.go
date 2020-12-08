@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"runtime"
 	"time"
+	"strconv"
 )
 
 type Spec_json struct {
@@ -179,22 +180,34 @@ func run(cmd string, args []string) (*bufio.Scanner, error) {
 	return output_scanner, err
 }
 
-func newPinger(source Pod, destination Pod, output chan PingRecord, run func(cmd string, arg []string) (*bufio.Scanner, error)) (*Pinger, error) {
+func getParams(regEx, url string) (paramsMap map[string]string) {
+
+    var compRegEx = regexp.MustCompile(regEx)
+    match := compRegEx.FindStringSubmatch(url)
+
+    paramsMap = make(map[string]string)
+    for i, name := range compRegEx.SubexpNames() {
+        if i > 0 && i <= len(match) {
+            paramsMap[name] = match[i]
+        }
+    }
+    return
+}
+
+func newPinger(source Pod, destination Pod, intervalSec int, output chan PingRecord, run func(cmd string, arg []string) (*bufio.Scanner, error)) (*Pinger, error) {
 
 	pinger := Pinger{
 		Done: make(chan struct{}),
 	}
 
 	go func() {
-		args := []string{destination.PodIP, "-i", "5"}
+		args := []string{destination.PodIP, "-i", strconv.Itoa(intervalSec)}
 		scanner, err := run("/bin/ping", args)
 
 		if err != nil {
 			fmt.Println(fmt.Sprintf("pinger error %v", err))
 		} else {
 			fmt.Println(fmt.Sprintf("pinger for '%s' started", destination.PodName))
-
-			start := time.Now()
 
 		working:
 			for {
@@ -205,17 +218,27 @@ func newPinger(source Pod, destination Pod, output chan PingRecord, run func(cmd
 					if scanner.Scan() {
 						text := scanner.Text()
 						if len(text) > 0 {
-							elapsed := time.Since(start)
+							
+							elapsed := 1000 * float64(intervalSec)
+							
+							m := getParams(`.+\stime=(?P<elapsed>[-+]?[0-9]*\.?[0-9]*)\sms$`, text)
+							if _, ok := m["elapsed"]; ok {
+							
+								e, err := strconv.ParseFloat(m["elapsed"], 64)
+								if err == nil {
+									elapsed = e
+								}
+							}
+
 
 							record := PingRecord{
 								Source      : source,
 								Destination : destination,
 								Message     : text,
-								Elapsed_ms  : float64(elapsed.Microseconds()) / 1000}
+								Elapsed_ms  : elapsed}
 							
 							output <- record
 							
-							start = time.Now()
 						}
 					}
 				}
@@ -228,7 +251,7 @@ func newPinger(source Pod, destination Pod, output chan PingRecord, run func(cmd
 	return &pinger, nil
 }
 
-func newPingersPool(filter string, output chan PingRecord, configRefreshInterval time.Duration, run func(cmd string, arg []string) (*bufio.Scanner, error)) {
+func newPingersPool(filter string, output chan PingRecord, configRefreshInterval time.Duration, pingIntervalSec int, run func(cmd string, arg []string) (*bufio.Scanner, error)) {
 
 	pingers := map[string]*Pinger{}
 
@@ -264,7 +287,7 @@ func newPingersPool(filter string, output chan PingRecord, configRefreshInterval
 					for key, pod := range pods {
 						_, exist := pingers[key]
 						if !exist {
-							pinger, _ := newPinger(sourcePod, pod, output, run)
+							pinger, _ := newPinger(sourcePod, pod, pingIntervalSec, output, run)
 							pingers[key] = pinger
 						}
 					}
@@ -289,7 +312,7 @@ func main() {
 	output := make(chan PingRecord)
 
 	go func() {
-		newPingersPool("kubernetes-network-check-", output, 30 * time.Second, run)
+		newPingersPool("kubernetes-network-check-", output, 30 * time.Second,5, run)
 	}()
 
 	// write to output all records

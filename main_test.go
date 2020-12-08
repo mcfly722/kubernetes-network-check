@@ -20,7 +20,7 @@ func newFakePod(podId string, status string) Pod_json {
 		Status: Status_json{
 			HostIP: fmt.Sprintf("nip-%v", podId),
 			PodIP:  fmt.Sprintf("%v", podId),
-			phase:  status}}
+			Phase:  status}}
 }
 
 func RemoveIndex(s []Pod_json, index int) []Pod_json {
@@ -109,7 +109,7 @@ func TestRace(test *testing.T) {
 	output := make(chan PingRecord)
 
 	go func() {
-		newPingersPool("test", output, 1*time.Millisecond, fakeRun)
+		newPingersPool("test", output, 1*time.Millisecond, 0, fakeRun)
 	}()
 
 	startTime := time.Now()
