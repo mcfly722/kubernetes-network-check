@@ -10,6 +10,12 @@ import (
 	"runtime"
 	"time"
 	"strconv"
+	"flag"
+
+	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 )
 
 type Spec_json struct {
@@ -253,6 +259,12 @@ func newPinger(source Pod, destination Pod, intervalSec int, output chan PingRec
 
 func newPingersPool(filter string, output chan PingRecord, configRefreshInterval time.Duration, pingIntervalSec int, run func(cmd string, arg []string) (*bufio.Scanner, error)) {
 
+
+
+
+
+
+
 	pingers := map[string]*Pinger{}
 
 	ips, err := getUsedIPs()
@@ -308,11 +320,53 @@ func newPingersPool(filter string, output chan PingRecord, configRefreshInterval
 }
 
 func main() {
+	var updateConfigSecFlag *int
+	var pingIntervalSecFlag *int
+
+	
+	updateConfigSecFlag = flag.Int("updateConfigIntervalSec", 30, "interval in seconds between asking cluster for ping pods configuration")
+	pingIntervalSecFlag = flag.Int("pingIntervalSec", 1, "equal ping -i parameter")
+	
+	flag.Parse()
+
+	config, err := rest.InClusterConfig()
+    if err != nil {
+        panic(err.Error())
+    }
+	
+	clientset, err := kubernetes.NewForConfig(config)
+    if err != nil {
+        panic(err.Error())
+    }
+	
+	namespace := "monitoring"
+	podName := "kubernetes-network-check"
+	pods, err := clientset.CoreV1().Pods(namespace).List(metav1.ListOptions{})
+	if errors.IsNotFound(err) {
+		fmt.Printf("Pod %s in namespace %s not found\n", podName, namespace)
+	} else if statusError, isStatus := err.(*errors.StatusError); isStatus {
+		fmt.Printf("Error getting pod %s in namespace %s: %v\n",
+			podName, namespace, statusError.ErrStatus.Message)
+	} else if err != nil {
+		panic(err.Error())
+	} else {
+		fmt.Printf("Found pod %s in namespace %s\n", podName, namespace)
+	}
+		
+	for _,pod := range pods.Items {
+		fmt.Println(fmt.Sprintf("Pod: %v PodIP: %v Node: %v NodeIP: %v Phase: %v", pod.GetName(),pod.Status.PodIP, pod.Spec.NodeName,pod.Status.HostIP, pod.Status.Phase ))
+	}
+		
+		
+	
+	fmt.Println(fmt.Sprintf("updateConfigIntervalSec = %vsec", updateConfigSecFlag))
+	fmt.Println(fmt.Sprintf("pingIntervalSec = %vsec", pingIntervalSecFlag))
+	
 
 	output := make(chan PingRecord)
 
 	go func() {
-		newPingersPool("kubernetes-network-check-", output, 30 * time.Second,5, run)
+		newPingersPool("kubernetes-network-check-", output, time.Duration(*updateConfigSecFlag) * time.Second, *pingIntervalSecFlag, run)
 	}()
 
 	// write to output all records
