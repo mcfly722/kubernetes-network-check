@@ -51,7 +51,7 @@ type PingRecord struct {
 	Source      Pod
 	Destination Pod
 	Message     string
-	Elapsed_us  int64
+	Elapsed_ms  float64
 }
 
 func (record *PingRecord) toString() string {
@@ -211,7 +211,7 @@ func newPinger(source Pod, destination Pod, output chan PingRecord, run func(cmd
 								Source      : source,
 								Destination : destination,
 								Message     : text,
-								Elapsed_us  : elapsed.Microseconds()}
+								Elapsed_ms  : float64(elapsed.Microseconds()) / 1000}
 							
 							output <- record
 							
