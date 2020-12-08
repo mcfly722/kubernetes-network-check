@@ -114,9 +114,7 @@ func getPods2(clientset *kubernetes.Clientset, namespace string, podPrefix strin
 
 				result[pod.hash()] = pod
 			}
-			
 		}
-		//fmt.Println(fmt.Sprintf("Pod: %v PodIP: %v Node: %v NodeIP: %v Phase: %v", pod.GetName(),pod.Status.PodIP, pod.Spec.NodeName,pod.Status.HostIP, pod.Status.Phase ))
 	}
 	
 	return result, nil
@@ -135,18 +133,8 @@ func run(cmd string, args []string) (*bufio.Scanner, error) {
 	fmt.Println(fmt.Sprintf("exec: %v %v", cmd, args))
 	command := exec.Command(cmd, args...)
 	commandOut, _ := command.StdoutPipe()
-//	commandErr, _ := command.StderrPipe()
 	output_scanner:= bufio.NewScanner(commandOut)
-//	err_scanner   := bufio.NewScanner(commandErr)
 	err := command.Start()
-
-/*
-	if err == nil { // out errStdout even if there are no execution errors
-		for err_scanner.Scan() {
-			fmt.Println(err_scanner.Text())
-		}
-	}
-*/
 
 	return output_scanner, err
 }
@@ -201,7 +189,6 @@ func newPinger(source Pod, destination Pod, intervalSec int, output chan PingRec
 								}
 							}
 
-
 							record := PingRecord{
 								Source      : source,
 								Destination : destination,
@@ -209,7 +196,6 @@ func newPinger(source Pod, destination Pod, intervalSec int, output chan PingRec
 								Elapsed_ms  : elapsed}
 							
 							output <- record
-							
 						}
 					}
 				}
@@ -292,6 +278,11 @@ func main() {
 	
 	flag.Parse()
 
+	fmt.Println(fmt.Sprintf("updateConfigIntervalSec = %v", *updateConfigSecFlag))
+	fmt.Println(fmt.Sprintf("pingIntervalSec = %v", *pingIntervalSecFlag))
+	fmt.Println(fmt.Sprintf("namespace = %s", *namespaceFlag))
+	fmt.Println(fmt.Sprintf("podsPrefix = %s", *podsPrefixFlag))
+
 	config, err := rest.InClusterConfig()
     if err != nil {
         panic(err.Error())
@@ -301,11 +292,6 @@ func main() {
     if err != nil {
         panic(err.Error())
     }
-	
-	fmt.Println(fmt.Sprintf("updateConfigIntervalSec = %vsec", updateConfigSecFlag))
-	fmt.Println(fmt.Sprintf("pingIntervalSec = %vsec", pingIntervalSecFlag))
-	fmt.Println(fmt.Sprintf("namespace = %s", namespaceFlag))
-	fmt.Println(fmt.Sprintf("podsPrefix = %s", podsPrefixFlag))
 
 	output := make(chan PingRecord)
 
