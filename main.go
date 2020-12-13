@@ -13,10 +13,8 @@ import (
 	"strings"
 	"time"
 
-	//	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
-	//	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/rest"
 )
 
@@ -115,7 +113,7 @@ func contains(s []string, str string) bool {
 	return false
 }
 
-func getPods2(k8s *k8s, namespace string, podPrefix string) (map[string]Pod, error) {
+func getPods(k8s *k8s, namespace string, podPrefix string) (map[string]Pod, error) {
 	result := make(map[string]Pod)
 
 	pods, err := k8s.clientset.CoreV1().Pods(namespace).List(metav1.ListOptions{})
@@ -245,7 +243,7 @@ func newPingersPool(k8s *k8s, namespace string, podsPrefix string, output chan P
 
 		//fmt.Println(fmt.Sprintf("UsedIps:%v", strings.Join(ips,",\n")));
 
-		pods, err := getPods2(k8s, namespace, podsPrefix)
+		pods, err := getPods(k8s, namespace, podsPrefix)
 		if err != nil {
 			//time.Sleep(2 * time.Second) // do not restart pod immediately
 			fmt.Println(fmt.Sprintf("error: %v", err))
@@ -265,8 +263,10 @@ func newPingersPool(k8s *k8s, namespace string, podsPrefix string, output chan P
 					for key, pod := range pods {
 						_, exist := pingers[key]
 						if !exist {
-							pinger, _ := newPinger(sourcePod, pod, pingIntervalSec, output, run)
-							pingers[key] = pinger
+							if !contains(ips, pod.PodIP) { // do not ping itself
+								pinger, _ := newPinger(sourcePod, pod, pingIntervalSec, output, run)
+								pingers[key] = pinger
+							}
 						}
 					}
 
