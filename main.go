@@ -55,6 +55,7 @@ type PingRecord struct {
 	Destination Pod
 	Message     string
 	Elapsed_ms  float64
+	Success     bool
 }
 
 func (record *PingRecord) toString() string {
@@ -207,12 +208,16 @@ func newPinger(source Pod, destination Pod, intervalSec int, output chan PingRec
 									elapsed = e
 								}
 							}
+							
+							successMatched, _:= regexp.Match(`bytes from`, []byte(text))
+							
 
 							record := PingRecord{
 								Source:      source,
 								Destination: destination,
 								Message:     text,
-								Elapsed_ms:  elapsed}
+								Elapsed_ms:  elapsed,
+								Success:     successMatched}
 
 							output <- record
 						}
