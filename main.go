@@ -198,7 +198,7 @@ func newPinger(source Pod, destination Pod, intervalSec int, output chan PingRec
 						text := scanner.Text()
 						if len(text) > 0 {
 
-							elapsed := 1000 * float64(intervalSec)
+							var elapsed float64 = 0
 
 							m := getParams(`.+\stime=(?P<elapsed>[-+]?[0-9]*\.?[0-9]*)\sms$`, text)
 							if _, ok := m["elapsed"]; ok {
