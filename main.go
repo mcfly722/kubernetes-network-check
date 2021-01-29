@@ -51,6 +51,7 @@ func (pod Pod) hash() string {
 }
 
 type PingRecord struct {
+	Timestamp   string
 	Source      Pod
 	Destination Pod
 	Message     string
@@ -213,6 +214,7 @@ func newPinger(source Pod, destination Pod, intervalSec int, output chan PingRec
 							
 
 							record := PingRecord{
+								Timestamp:   time.Now().Format(time.RFC3339),
 								Source:      source,
 								Destination: destination,
 								Message:     text,
