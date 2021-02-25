@@ -1,0 +1,75 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: monitoring
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: kubernetes-network-check-serviceaccount
+  namespace: monitoring
+---
+apiVersion: rbac.authorization.k8s.io/v1beta1
+kind: ClusterRole
+metadata:
+  name: kubernetes-network-check-clusterrole
+  namespace: monitoring
+rules:
+  - apiGroups: ["*"]
+    resources: ["pods"]
+    verbs: ["get","list","watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1beta1
+kind: ClusterRoleBinding
+metadata:
+  name: kubernetes-network-check-clusterrolebinding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kubernetes-network-check-clusterrole
+subjects:
+- kind: ServiceAccount
+  name: kubernetes-network-check-serviceaccount
+  namespace: monitoring
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: kubernetes-network-check
+  namespace: monitoring
+spec:
+  selector:
+    matchLabels:
+      name: kubernetes-network-check
+  template:
+    metadata:
+      labels:
+        name: kubernetes-network-check
+    spec:
+      serviceAccount: kubernetes-network-check-serviceaccount
+      serviceAccountName: kubernetes-network-check-serviceaccount
+      tolerations:
+        - operator: Exists
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/os
+                operator: NotIn
+                values:
+                - windows
+      containers:
+      - name: kubernetes-network-check
+        image: mcfly722/kubernetes-network-check:latest
+        command:
+          - /kubernetes-network-check
+        args: ["-updateConfigIntervalSec","31","-pingIntervalSec","5","-namespace","monitoring","-podsPrefix","kubernetes-network-check"]
+        env:
+        resources:
+          limits:
+            cpu: 30m
+            memory: 50Mi
+          requests:
+            cpu: 30m
+            memory: 50Mi

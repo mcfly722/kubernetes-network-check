@@ -1,0 +1,115 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: monitoring
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: fluentd-service-account
+  namespace: monitoring
+---
+apiVersion: rbac.authorization.k8s.io/v1beta1
+kind: ClusterRole
+metadata:
+  name: fluentd-service-account
+  namespace: monitoring
+rules:
+  - apiGroups: ["*"]
+    resources: ["events","clusterevents","pods","namespaces","deployments","replicasets","daemonsets","statefulsets"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1beta1
+kind: ClusterRoleBinding
+metadata:
+  name: fluentd-service-account
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: fluentd-service-account
+subjects:
+- kind: ServiceAccount
+  name: fluentd-service-account
+  namespace: monitoring
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: fluentd-system
+  namespace: monitoring
+spec:
+  selector:
+    matchLabels:
+      name: fluentd-system
+  template:
+    metadata:
+      labels:
+        name: fluentd-system
+    spec:
+      serviceAccount: fluentd-service-account
+      serviceAccountName: fluentd-service-account
+      tolerations:
+        - operator: Exists
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/os
+                operator: NotIn
+                values:
+                - windows
+      containers:
+      - name: fluentd-kubernetes-daemonset-system
+        image: fluent/fluentd-kubernetes-daemonset:v1-debian-elasticsearch
+        command:
+          - fluentd
+          - -c
+          - /fluentd/etc/config/entry/fluentd-system.config
+        env:
+          - name:  FLUENT_ELASTICSEARCH_HOST
+            value: "$(FLUENT_ELASTICSEARCH_HOST)"
+          - name:  FLUENT_ELASTICSEARCH_PORT
+            value: "$(FLUENT_ELASTICSEARCH_PORT)"
+          - name: FLUENT_ELASTICSEARCH_SCHEME
+            value: "$(FLUENT_ELASTICSEARCH_SCHEME)"
+          - name: FLUENT_ELASTICSEARCH_SSL_VERIFY
+            value: "false"
+          - name: FLUENT_ELASTICSEARCH_SSL_VERSION
+            value: "TLSv1_2"
+          - name: FLUENT_ELASTICSEARCH_USER
+            value: "$(FLUENT_ELASTICSEARCH_USER)"
+          - name: FLUENT_ELASTICSEARCH_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: fluentd-elasticsearch-password
+                key: password
+          - name: FLUENT_ELASTICSEARCH_LOGSTASH_INDEX_NAME
+            value: "$(CLUSTER_NAME)"
+          - name: FLUENT_ELASTICSEARCH_LOGSTASH_DATEFORMAT
+            value: "YYYY-MM-DD"
+        resources:
+          limits:
+            cpu: 20m
+            memory: 100Mi
+          requests:
+            cpu: 20m
+            memory: 100Mi
+        volumeMounts:
+        - name: config
+          mountPath: /fluentd/etc/config/entry
+        - name: varlog
+          mountPath: /var/log
+        - name: varlibdockercontainers
+          mountPath: /var/lib/docker/containers
+          readOnly: true
+      volumes:
+      - name: config
+        configMap:
+          name: fluentd-system-config
+      - name: varlog
+        hostPath:
+          path: /var/log
+      - name: varlibdockercontainers
+        hostPath:
+          path: /var/lib/docker/containers
