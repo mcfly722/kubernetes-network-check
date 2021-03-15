@@ -7,5 +7,5 @@ FROM alpine:3.12
 COPY --from=golang /main /kubernetes-network-check
 RUN apk add --no-cache ca-certificates && \
     update-ca-certificates
-RUN apk add --no-cache --virtual .build-deps wget gnupg tar iputils && \
+RUN apk add --no-cache --virtual iputils && \
 RUN chmod +x /kubernetes-network-check
