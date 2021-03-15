@@ -210,8 +210,7 @@ func newPinger(source Pod, destination Pod, intervalSec int, output chan PingRec
 								}
 							}
 							
-							successMatched, _:= regexp.Match(`bytes from`, []byte(text))
-							
+							successMatched := strings.Contains(text,"bytes from")
 
 							record := PingRecord{
 								Timestamp:   time.Now().Format(time.RFC3339),
