@@ -13,7 +13,5 @@ RUN apt-get update && \
 FROM alpine:3.12
 COPY --from=golang /main /kubernetes-network-check
 RUN chmod +x /kubernetes-network-check
-
-RUN rm -rf /bin/ping
-COPY --from=debian /bin/ping /bin/ping
-RUN chmod +x /bin/ping
+COPY --from=debian /bin/ping /ping
+RUN chmod +x /ping
