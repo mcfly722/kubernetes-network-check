@@ -181,7 +181,11 @@ func newPinger(source Pod, destination Pod, intervalSec int, output chan PingRec
 	}
 
 	go func() {
-		args := []string{destination.PodIP, "-i", strconv.Itoa(intervalSec)}
+	
+	
+	
+	
+		args := []string{destination.PodIP, "-i", strconv.Itoa(intervalSec),"-O"}
 		scanner, err := run("/bin/ping", args)
 
 		if err != nil {
